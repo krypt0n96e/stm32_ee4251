@@ -1,0 +1,19 @@
+23:20:21 **** Incremental Build of configuration Debug for project LCD ****
+make -j4 all 
+arm-none-eabi-gcc -o "LCD.elf" @"objects.list"   -mcpu=cortex-m3 -T"C:\Users\penta\Documents\stm32_ee4251\LCD\STM32F103C8TX_FLASH.ld" --specs=nosys.specs -Wl,-Map="LCD.map" -Wl,--gc-sections -static --specs=nano.specs -mfloat-abi=soft -mthumb -u _printf_float -u _scanf_float -Wl,--start-group -lc -lm -Wl,--end-group
+Finished building target: LCD.elf
+ 
+arm-none-eabi-size  LCD.elf 
+arm-none-eabi-objdump -h -S LCD.elf  > "LCD.list"
+arm-none-eabi-objcopy  -O ihex LCD.elf  "LCD.hex"
+   text	   data	    bss	    dec	    hex	filename
+  30640	    484	   1996	  33120	   8160	LCD.elf
+arm-none-eabi-objcopy  -O binary LCD.elf  "LCD.bin"
+Finished building: default.size.stdout
+ 
+Finished building: LCD.hex
+Finished building: LCD.bin
+Finished building: LCD.list
+ 
+ 
+ 
