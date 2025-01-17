@@ -1,5 +1,6 @@
 "./Core/Src/I2C_LCD.o"
 "./Core/Src/I2C_LCD_cfg.o"
+"./Core/Src/Util.o"
 "./Core/Src/main.o"
 "./Core/Src/stm32f1xx_hal_msp.o"
 "./Core/Src/stm32f1xx_it.o"

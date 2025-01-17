@@ -21,7 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "I2C_LCD_cfg.h"
+//#include "I2C_LCD_cfg.h"
 #include "I2C_LCD.h"
 /* USER CODE END Includes */
 
@@ -101,12 +101,14 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-	  snprintf(buf,64,"Value 1: %.2lf\n",value1);
+	  I2C_LCD_Clear(MyI2C_LCD);
+	  snprintf(buf,64,"Value 1: %.2lf",value1++/100);
 	  I2C_LCD_SetCursor(MyI2C_LCD, 0, 0);
 	  I2C_LCD_WriteString(MyI2C_LCD, buf);
+	  snprintf(buf,64,"Value 2: %.2lf",value2--/100);
 	  I2C_LCD_SetCursor(MyI2C_LCD, 0, 1);
-	  snprintf(buf,64,"Value 1: %.2lf\n",value2);
 	  I2C_LCD_WriteString(MyI2C_LCD, buf);
+	  HAL_Delay(1000);
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */

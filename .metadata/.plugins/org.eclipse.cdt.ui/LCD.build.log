@@ -1,5 +1,18 @@
-23:20:21 **** Incremental Build of configuration Debug for project LCD ****
+00:00:14 **** Incremental Build of configuration Debug for project LCD ****
 make -j4 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m3 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F103xB -c -I../Core/Inc -I../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy -I../Drivers/STM32F1xx_HAL_Driver/Inc -I../Drivers/CMSIS/Device/ST/STM32F1xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfloat-abi=soft -mthumb -o "Core/Src/main.o"
+../Core/Src/main.c: In function 'main':
+../Core/Src/main.c:105:11: warning: implicit declaration of function 'snprintf' [-Wimplicit-function-declaration]
+  105 |           snprintf(buf,64,"Value 1: %.2lf",value1++/100);
+      |           ^~~~~~~~
+../Core/Src/main.c:26:1: note: include '<stdio.h>' or provide a declaration of 'snprintf'
+   25 | #include "I2C_LCD.h"
+  +++ |+#include <stdio.h>
+   26 | /* USER CODE END Includes */
+../Core/Src/main.c:105:11: warning: incompatible implicit declaration of built-in function 'snprintf' [-Wbuiltin-declaration-mismatch]
+  105 |           snprintf(buf,64,"Value 1: %.2lf",value1++/100);
+      |           ^~~~~~~~
+../Core/Src/main.c:105:11: note: include '<stdio.h>' or provide a declaration of 'snprintf'
 arm-none-eabi-gcc -o "LCD.elf" @"objects.list"   -mcpu=cortex-m3 -T"C:\Users\penta\Documents\stm32_ee4251\LCD\STM32F103C8TX_FLASH.ld" --specs=nosys.specs -Wl,-Map="LCD.map" -Wl,--gc-sections -static --specs=nano.specs -mfloat-abi=soft -mthumb -u _printf_float -u _scanf_float -Wl,--start-group -lc -lm -Wl,--end-group
 Finished building target: LCD.elf
  
@@ -7,7 +20,7 @@ arm-none-eabi-size  LCD.elf
 arm-none-eabi-objdump -h -S LCD.elf  > "LCD.list"
 arm-none-eabi-objcopy  -O ihex LCD.elf  "LCD.hex"
    text	   data	    bss	    dec	    hex	filename
-  30640	    484	   1996	  33120	   8160	LCD.elf
+  30832	    484	   1996	  33312	   8220	LCD.elf
 arm-none-eabi-objcopy  -O binary LCD.elf  "LCD.bin"
 Finished building: default.size.stdout
  
@@ -18,5 +31,5 @@ Finished building: LCD.list
  
  
 
-23:20:22 Build Finished. 0 errors, 0 warnings. (took 597ms)
+00:00:15 Build Finished. 0 errors, 2 warnings. (took 856ms)
 
