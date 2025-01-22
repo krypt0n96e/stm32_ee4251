@@ -1,0 +1,4 @@
+../Core/Src/dht22.c:3:22:DelayMicro	2
+../Core/Src/dht22.c:11:6:dht22_init	1
+../Core/Src/dht22.c:26:9:DHT22_Get_Temp	9
+../Core/Src/dht22.c:71:9:DHT22_Get_Humidity	9
