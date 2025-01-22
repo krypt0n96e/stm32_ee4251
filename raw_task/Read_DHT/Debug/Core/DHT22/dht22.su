@@ -1,0 +1,3 @@
+../Core/DHT22/dht22.c:3:22:DelayMicro	16	static
+../Core/DHT22/dht22.c:11:6:dht22_init	24	static
+../Core/DHT22/dht22.c:26:9:DHT22_GetTemp_Humidity	32	static

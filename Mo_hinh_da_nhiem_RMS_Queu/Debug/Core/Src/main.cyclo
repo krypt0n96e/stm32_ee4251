@@ -17,5 +17,5 @@
 ../Core/Src/main.c:760:6:Function_Control_On	1
 ../Core/Src/main.c:782:6:Function_LCD_UART	5
 ../Core/Src/main.c:824:6:Function_Set_CDT	10
-../Core/Src/main.c:886:6:Function_Control_Off	1
-../Core/Src/main.c:914:6:Error_Handler	1
+../Core/Src/main.c:887:6:Function_Control_Off	1
+../Core/Src/main.c:927:6:Error_Handler	1

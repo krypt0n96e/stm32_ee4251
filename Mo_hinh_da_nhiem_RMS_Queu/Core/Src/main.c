@@ -686,7 +686,7 @@ void Funciton_Get_Distance(void *argument)
   /* Infinite loop */
   for(;;)
   {
-	printf("@%ld Start task Distance\r\n",uwTick);
+	printf("@%lu Start task Distance\r\n", osKernelGetSysTimerCount());
 	int id = 1;
 	if (hc04_state == HCSR04_IDLE_STATE) {
 		HCSR04_Start();
@@ -714,7 +714,7 @@ void Function_Get_Temp(void *argument)
   /* Infinite loop */
   for(;;)
   {
-	printf("@%ld Start task Temp\r\n",uwTick);
+	printf("@%lu Start task Temp\r\n", osKernelGetSysTimerCount());
 	osThreadSetPriority(Get_TempHandle, osPriorityRealtime); // Tăng ưu tiên tạm thời
 	int id = 3;
 	DHT22_Get_Temp(&T);
@@ -739,7 +739,7 @@ void Function_Get_Humidity(void *argument)
   /* Infinite loop */
   for(;;)
   {
-	printf("@%ld Start task Humi\r\n", uwTick);
+	printf("@%lu Start task Humi\r\n", osKernelGetSysTimerCount());
 	osThreadSetPriority(Get_HumidityHandle, osPriorityRealtime); // Tăng ưu tiên tạm thời
 	int id =2;
 	DHT22_Get_Humidity(&H);
@@ -831,6 +831,7 @@ void Function_Set_CDT(void *argument)
 	 switch (received_id) {
 		case 1:
 				  printf("Resume System\r\n");
+				  I2C_LCD_Clear(MyI2C_LCD);
 				  osThreadResume(Get_DistanceHandle);
 				  osThreadResume(Get_TempHandle);
 				  osThreadResume(Get_HumidityHandle);
@@ -889,20 +890,32 @@ void Function_Control_Off(void *argument)
 	osThreadSuspend(Get_DistanceHandle);
 	osThreadSuspend(Get_HumidityHandle);
 	osThreadSuspend(Get_TempHandle);
-	sprintf(buf,"Send 1 to start");
 	I2C_LCD_Clear(MyI2C_LCD);
+	sprintf(buf,"   Send start");
 	I2C_LCD_SetCursor(MyI2C_LCD, 0, 0);
 	I2C_LCD_WriteString(MyI2C_LCD, buf);
-	printf("Gui 1 qua UART de chay he thong\r\n");
+	sprintf(buf," to run system");
+	I2C_LCD_SetCursor(MyI2C_LCD, 0, 1);
+	I2C_LCD_WriteString(MyI2C_LCD, buf);
+	printf("Gui start qua UART de chay he thong\r\n");
 
   /* Infinite loop */
   for(;;)
   {
 	 osThreadFlagsWait(0x01, osFlagsWaitAny, osWaitForever); // Chờ tín hiệu từ ISR
-	 printf("System paused.\r\n");
+
 	 osThreadSuspend(Get_DistanceHandle);
 	 osThreadSuspend(Get_HumidityHandle);
 	 osThreadSuspend(Get_TempHandle);
+	 I2C_LCD_Clear(MyI2C_LCD);
+	 printf("System paused.\r\n");
+	 printf("Send start to resume system");
+	 sprintf(buf,"   Send start");
+	 I2C_LCD_SetCursor(MyI2C_LCD, 0, 0);
+	 I2C_LCD_WriteString(MyI2C_LCD, buf);
+	 sprintf(buf,"to resume system");
+	 I2C_LCD_SetCursor(MyI2C_LCD, 0, 1);
+	 I2C_LCD_WriteString(MyI2C_LCD, buf);
   }
   /* USER CODE END Function_Control_Off */
 }

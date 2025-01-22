@@ -1,0 +1,12 @@
+../Core/Src/main.c:82:2:__io_putchar	1
+../Core/Src/main.c:87:7:SPTTS_Task1	2
+../Core/Src/main.c:101:7:SPTTS_Task2	1
+../Core/Src/main.c:112:7:SPTTS_Task3	1
+../Core/Src/main.c:131:5:main	26
+../Core/Src/main.c:206:6:SystemClock_Config	3
+../Core/Src/main.c:246:13:MX_I2C1_Init	2
+../Core/Src/main.c:280:13:MX_TIM1_Init	4
+../Core/Src/main.c:326:13:MX_USART3_UART_Init	2
+../Core/Src/main.c:359:13:MX_GPIO_Init	1
+../Core/Src/main.c:395:6:HAL_UART_RxCpltCallback	4
+../Core/Src/main.c:418:6:Error_Handler	1
