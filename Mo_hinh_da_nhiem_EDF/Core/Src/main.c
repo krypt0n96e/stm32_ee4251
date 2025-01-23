@@ -34,7 +34,6 @@ I2C_HandleTypeDef hi2c1;
 
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim3;
-TIM_HandleTypeDef htim4;
 
 UART_HandleTypeDef huart3;
 
@@ -42,21 +41,21 @@ UART_HandleTypeDef huart3;
 osThreadId_t Get_DistanceHandle;
 const osThreadAttr_t Get_Distance_attributes = {
   .name = "Get_Distance",
-  .stack_size = 128 * 4,
+  .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for Get_Temp */
 osThreadId_t Get_TempHandle;
 const osThreadAttr_t Get_Temp_attributes = {
   .name = "Get_Temp",
-  .stack_size = 128 * 4,
+  .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for Get_Humidity */
 osThreadId_t Get_HumidityHandle;
 const osThreadAttr_t Get_Humidity_attributes = {
   .name = "Get_Humidity",
-  .stack_size = 128 * 4,
+  .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for LCD_UART */
@@ -64,17 +63,30 @@ osThreadId_t LCD_UARTHandle;
 const osThreadAttr_t LCD_UART_attributes = {
   .name = "LCD_UART",
   .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityHigh,
+  .priority = (osPriority_t) osPriorityHigh1,
 };
 /* Definitions for LCDQueue */
 osMessageQueueId_t LCDQueueHandle;
 const osMessageQueueAttr_t LCDQueue_attributes = {
   .name = "LCDQueue"
 };
+/* Definitions for EDF_Scheduler */
+osTimerId_t EDF_SchedulerHandle;
+const osTimerAttr_t EDF_Scheduler_attributes = {
+  .name = "EDF_Scheduler"
+};
 /* USER CODE BEGIN PV */
 char buf1[16],buf2[16]; // 1 dòng LCD chỉ có 16 ký tự
 float T,H;
-int T_Distance = 200, T_Temp = 400, T_Humidity = 600;  //Chu kỳ cho từng task
+uint16_t T_Distance = 200, T_Temp = 400, T_Humidity = 600;  //Chu kỳ cho từng task
+uint16_t C_Distance = 1, C_Temp = 8, C_Humidity = 8;  //Chu kỳ cho từng task
+uint16_t D_Distance = 200, D_Temp = 400, D_Humidity = 600;  //Chu kỳ cho từng task
+uint32_t earliest_d_distance =0;
+uint32_t earliest_d_temp =0;
+uint32_t earliest_d_humidity = 0;
+uint32_t end_t_distance = 0;
+uint32_t end_t_temp = 0;
+uint32_t end_t_humidity = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -84,51 +96,34 @@ static void MX_USART3_UART_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_TIM3_Init(void);
-static void MX_TIM4_Init(void);
 void Function_Get_Distance(void *argument);
 void Function_Get_Temp(void *argument);
 void Function_Get_Humidity(void *argument);
 void Function_LCD_UART(void *argument);
+void CallbackEDF_Scheduler(void *argument);
 
 /* USER CODE BEGIN PFP */
 void EDF_Scheduler(void) {
-    static uint32_t last_exec_time_distance = 0;
-    static uint32_t last_exec_time_temp = 0;
-    static uint32_t last_exec_time_humidity = 0;
-    uint32_t current_time = HAL_GetTick();  // Get the current system time
-
-    // Task periods for EDF
-    const uint32_t Get_Distance_period = T_Distance;  // Period (ms)
-    const uint32_t Get_Temp_period = T_Temp;      // Period (ms)
-    const uint32_t Get_Humidity_period = Get_Temp_period;  // Period (ms)
-
-    // EDF Scheduling logic
-    // Ví dụ thay đổi mức ưu tiên trong EDF scheduler
-    if (current_time - last_exec_time_distance >= Get_Distance_period) {
-    	printf("d->1\n");
+	printf("%lu ----%lu----%lu\n",earliest_d_distance, earliest_d_humidity, earliest_d_temp);
+    if (earliest_d_distance <= earliest_d_humidity && earliest_d_distance <= earliest_d_temp) {
+        printf("d->1\n");
         osThreadFlagsSet(Get_DistanceHandle, 0x01);
-        osThreadSetPriority(Get_DistanceHandle, osPriorityHigh);  // Thay đổi mức ưu tiên của task
-        osThreadSetPriority(Get_HumidityHandle, osPriorityNormal);
-        osThreadSetPriority(Get_TempHandle, osPriorityNormal);
-        last_exec_time_distance = current_time;
-    }
-    if (current_time - last_exec_time_temp >= Get_Temp_period) {
-    	printf("t->1\n");
-        osThreadFlagsSet(Get_TempHandle, 0x01);
-        osThreadSetPriority(Get_TempHandle, osPriorityHigh);  // Thay đổi mức ưu tiên của task
-        osThreadSetPriority(Get_DistanceHandle, osPriorityNormal);
-        osThreadSetPriority(Get_HumidityHandle, osPriorityNormal);
-        last_exec_time_temp = current_time;
-    }
-    if (current_time - last_exec_time_humidity >= Get_Humidity_period) {
-    	printf("h->1\n");
+//        osThreadSetPriority(Get_DistanceHandle, osPriorityHigh);
+//        osThreadSetPriority(Get_HumidityHandle, osPriorityNormal);
+//        osThreadSetPriority(Get_TempHandle, osPriorityNormal);
+    } else if (earliest_d_humidity <= earliest_d_temp) {
+        printf("h->1\n");
         osThreadFlagsSet(Get_HumidityHandle, 0x01);
-        osThreadSetPriority(Get_HumidityHandle, osPriorityHigh);  // Thay đổi mức ưu tiên của task
-        osThreadSetPriority(Get_DistanceHandle, osPriorityNormal);
-        osThreadSetPriority(Get_TempHandle, osPriorityNormal);
-        last_exec_time_humidity = current_time;
+//        osThreadSetPriority(Get_HumidityHandle, osPriorityHigh);
+//        osThreadSetPriority(Get_DistanceHandle, osPriorityNormal);
+//        osThreadSetPriority(Get_TempHandle, osPriorityNormal);
+    } else {
+        printf("t->1\n");
+        osThreadFlagsSet(Get_TempHandle, 0x01);
+//        osThreadSetPriority(Get_TempHandle, osPriorityHigh);
+//        osThreadSetPriority(Get_DistanceHandle, osPriorityNormal);
+//        osThreadSetPriority(Get_HumidityHandle, osPriorityNormal);
     }
-
 }
 /* USER CODE END PFP */
 
@@ -169,6 +164,7 @@ int main(void)
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
+
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
@@ -177,13 +173,26 @@ int main(void)
   MX_I2C1_Init();
   MX_TIM1_Init();
   MX_TIM3_Init();
-  MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
+  HAL_TIM_Base_Start(&htim3);
   printf("start\n");
+
+  CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+  DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+
   HCSR04_Init(&htim1);
   dht22_init();
   I2C_LCD_Init(MyI2C_LCD);
-  EDF_Scheduler();
+
+  uint32_t current_time = HAL_GetTick();  // Get the current system time
+  earliest_d_distance +=D_Distance;
+  earliest_d_temp +=T_Temp;
+  earliest_d_humidity +=T_Humidity;
+  end_t_distance = current_time+T_Distance;
+  end_t_temp = current_time+T_Temp;
+  end_t_humidity = current_time+T_Humidity;
+
+
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -195,7 +204,16 @@ int main(void)
   /* USER CODE BEGIN RTOS_SEMAPHORES */
   /* USER CODE END RTOS_SEMAPHORES */
 
+  /* Create the timer(s) */
+  /* creation of EDF_Scheduler */
+  EDF_SchedulerHandle = osTimerNew(CallbackEDF_Scheduler, osTimerPeriodic, NULL, &EDF_Scheduler_attributes);
+
   /* USER CODE BEGIN RTOS_TIMERS */
+  /* Start the EDF Scheduler timer */
+  if (osTimerStart(EDF_SchedulerHandle, 100) != osOK) {
+      printf("Failed to start EDF Scheduler timer\n");
+  }
+
   /* USER CODE END RTOS_TIMERS */
 
   /* Create the queue(s) */
@@ -231,6 +249,8 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+
+
   while(1)
   {
     /* USER CODE END WHILE */
@@ -392,53 +412,7 @@ static void MX_TIM3_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN TIM3_Init 2 */
-  HAL_TIM_Base_Start(&htim3);
   /* USER CODE END TIM3_Init 2 */
-
-}
-
-/**
-  * @brief TIM4 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_TIM4_Init(void)
-{
-
-  /* USER CODE BEGIN TIM4_Init 0 */
-
-  /* USER CODE END TIM4_Init 0 */
-
-  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
-  TIM_MasterConfigTypeDef sMasterConfig = {0};
-
-  /* USER CODE BEGIN TIM4_Init 1 */
-
-  /* USER CODE END TIM4_Init 1 */
-  htim4.Instance = TIM4;
-  htim4.Init.Prescaler = 0;
-  htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim4.Init.Period = 65535;
-  htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-  if (HAL_TIM_ConfigClockSource(&htim4, &sClockSourceConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim4, &sMasterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN TIM4_Init 2 */
-  HAL_TIM_Base_Start_IT(&htim4);  // Kích hoạt ngắt Timer 4
-  /* USER CODE END TIM4_Init 2 */
 
 }
 
@@ -527,17 +501,26 @@ void Function_Get_Distance(void *argument)
   /* USER CODE BEGIN 5 */
 	while(1){
 		osThreadFlagsWait(0x01, osFlagsWaitAny, osWaitForever);  // Wait for the EDF scheduler signal
+////		osStatus_t status = osThreadFlagsWait(0x01, osFlagsWaitAny, 1000); // 1-second timeout
+////		if (status == osErrorTimeout) {
+////		    printf("Timeout waiting for signal\n");
+//		}
 		printf("test_d\n");
+		earliest_d_distance=end_t_distance+D_Distance;
 
 		uint16_t id=1;
 		if (hc04_state == HCSR04_IDLE_STATE) {
 			HCSR04_Start();
-			HCSR04_Handle();
-			// Send the result to the LCD queue
-			osMessageQueuePut(LCDQueueHandle, &id, 0, osWaitForever);
 		}
-		EDF_Scheduler();
-		osDelay(T_Distance);
+		int retry;
+		retry = HCSR04_Handle();
+		if(retry){
+			HCSR04_Start();
+			HCSR04_Handle();
+		}
+		earliest_d_distance=end_t_distance+D_Distance;
+		// Send the result to the LCD queue
+		osMessageQueuePut(LCDQueueHandle, &id, 0, osWaitForever);
 	}
 
   /* USER CODE END 5 */
@@ -550,6 +533,10 @@ void Function_Get_Temp(void *argument)
   /* USER CODE BEGIN Function_Get_Temp */
 	while(1){
 		osThreadFlagsWait(0x01, osFlagsWaitAny, osWaitForever);  // Wait for the EDF scheduler signal
+//		osStatus_t status = osThreadFlagsWait(0x01, osFlagsWaitAny, 1000); // 1-second timeout
+//		if (status == osErrorTimeout) {
+//		    printf("Timeout waiting for signal\n");
+//		}
 		printf("test_t\n");
 
 		uint16_t id=2;
@@ -557,9 +544,9 @@ void Function_Get_Temp(void *argument)
 
 
 		// Send the result to the LCD queue
+		earliest_d_temp=end_t_temp+D_Temp;
 		osMessageQueuePut(LCDQueueHandle, &id, 0, osWaitForever);
-		EDF_Scheduler();
-		osDelay(T_Temp);
+
 	}
 
   /* USER CODE END Function_Get_Temp */
@@ -573,13 +560,18 @@ void Function_Get_Humidity(void *argument)
 
 	while(1){
 		osThreadFlagsWait(0x01, osFlagsWaitAny, osWaitForever);  // Wait for the EDF scheduler signal
+		/* Start the EDF Scheduler timer */
+//		if (osTimerStart(EDF_SchedulerHandle, 1) != osOK) {
+//		    printf("Failed to start EDF Scheduler timer\n");
+//		}
+
 		printf("test_h\n");
 		DHT22_Get_Humidity(&H);
 		uint16_t id=3;
 		// Send the result to the LCD queue
+		earliest_d_humidity=end_t_humidity+D_Humidity;
 		osMessageQueuePut(LCDQueueHandle, &id, 0, osWaitForever);
-		EDF_Scheduler();
-		osDelay(T_Humidity);
+
 	}
 
   /* USER CODE END Function_Get_Humidity */
@@ -632,6 +624,15 @@ void Function_LCD_UART(void *argument)
   /* USER CODE END Function_LCD_UART */
 }
 
+/* CallbackEDF_Scheduler function */
+void CallbackEDF_Scheduler(void *argument)
+{
+  /* USER CODE BEGIN CallbackEDF_Scheduler */
+	EDF_Scheduler();
+
+  /* USER CODE END CallbackEDF_Scheduler */
+}
+
 /**
   * @brief  Period elapsed callback in non blocking mode
   * @note   This function is called  when TIM2 interrupt took place, inside
@@ -643,14 +644,13 @@ void Function_LCD_UART(void *argument)
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   /* USER CODE BEGIN Callback 0 */
+
   /* USER CODE END Callback 0 */
   if (htim->Instance == TIM2) {
     HAL_IncTick();
   }
   /* USER CODE BEGIN Callback 1 */
-  if (htim->Instance == TIM4) {
-//      EDF_Scheduler(); // Gọi hàm EDF Scheduler mỗi khi Timer 4 tạo ngắt
-  }
+
   /* USER CODE END Callback 1 */
 }
 

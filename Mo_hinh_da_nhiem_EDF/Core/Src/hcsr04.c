@@ -10,6 +10,7 @@ static void pulseGPIO(GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin);
 
 // Khởi tạo cảm biến HCSR04
 void HCSR04_Init(TIM_HandleTypeDef *timer) {
+
     htim = timer;  // Gán con trỏ timer
 }
 
@@ -37,12 +38,14 @@ void HCSR04_Start(void) {
 }
 
 // Xử lý trạng thái hoàn thành đo
-void HCSR04_Handle(void) {
+int HCSR04_Handle(void) {
     if (hc04_state == HCSR04_COMPLETE_STATE) {
         hcsr04_distance = 0.017f * htim->Instance->CNT;  // Tính khoảng cách
         HCSR04_Complete_Callback(hcsr04_distance);
         hc04_state = HCSR04_IDLE_STATE;
+        return 1;
     }
+    return 0;
 }
 
 // Callback EXTI khi xảy ra ngắt

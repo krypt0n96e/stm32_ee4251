@@ -18,7 +18,7 @@ void HCSR04_Init(TIM_HandleTypeDef *timer);
 void HCSR04_Start(void);
 
 // Xử lý trạng thái hoàn thành đo
-void HCSR04_Handle(void);
+int HCSR04_Handle(void);
 
 // Callback khi hoàn thành đo khoảng cách
 void HCSR04_Complete_Callback(float measured_distance);
