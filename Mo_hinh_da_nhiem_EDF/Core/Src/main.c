@@ -18,6 +18,19 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+typedef struct {
+    uint32_t earliest_deadline;
+    uint32_t end_cycle;
+    uint32_t deadline;
+    uint32_t period;
+} TaskState;
+
+TaskState tasks[] = {
+    {0,0, 50, 100},  // Distance task
+    {0,0, 100, 200},  // Temp task
+    {0,0, 150, 300},  // Humidity task
+};
+
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -62,8 +75,8 @@ const osThreadAttr_t Get_Humidity_attributes = {
 osThreadId_t LCD_UARTHandle;
 const osThreadAttr_t LCD_UART_attributes = {
   .name = "LCD_UART",
-  .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityHigh1,
+  .stack_size = 256 * 4,
+  .priority = (osPriority_t) osPriorityAboveNormal,
 };
 /* Definitions for LCDQueue */
 osMessageQueueId_t LCDQueueHandle;
@@ -75,18 +88,20 @@ osTimerId_t EDF_SchedulerHandle;
 const osTimerAttr_t EDF_Scheduler_attributes = {
   .name = "EDF_Scheduler"
 };
+/* Definitions for UARTMutex */
+osMutexId_t UARTMutexHandle;
+const osMutexAttr_t UARTMutex_attributes = {
+  .name = "UARTMutex"
+};
 /* USER CODE BEGIN PV */
+int NUM_TASKS=3;
 char buf1[16],buf2[16]; // 1 dòng LCD chỉ có 16 ký tự
 float T,H;
-uint16_t T_Distance = 200, T_Temp = 400, T_Humidity = 600;  //Chu kỳ cho từng task
 uint16_t C_Distance = 1, C_Temp = 8, C_Humidity = 8;  //Chu kỳ cho từng task
-uint16_t D_Distance = 200, D_Temp = 400, D_Humidity = 600;  //Chu kỳ cho từng task
-uint32_t earliest_d_distance =0;
-uint32_t earliest_d_temp =0;
-uint32_t earliest_d_humidity = 0;
-uint32_t end_t_distance = 0;
-uint32_t end_t_temp = 0;
-uint32_t end_t_humidity = 0;
+#define FLAG_TASK_0 0x01
+#define FLAG_TASK_1 0x02
+#define FLAG_TASK_2 0x04
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -104,27 +119,44 @@ void CallbackEDF_Scheduler(void *argument);
 
 /* USER CODE BEGIN PFP */
 void EDF_Scheduler(void) {
-	printf("%lu ----%lu----%lu\n",earliest_d_distance, earliest_d_humidity, earliest_d_temp);
-    if (earliest_d_distance <= earliest_d_humidity && earliest_d_distance <= earliest_d_temp) {
-        printf("d->1\n");
-        osThreadFlagsSet(Get_DistanceHandle, 0x01);
-//        osThreadSetPriority(Get_DistanceHandle, osPriorityHigh);
-//        osThreadSetPriority(Get_HumidityHandle, osPriorityNormal);
-//        osThreadSetPriority(Get_TempHandle, osPriorityNormal);
-    } else if (earliest_d_humidity <= earliest_d_temp) {
-        printf("h->1\n");
-        osThreadFlagsSet(Get_HumidityHandle, 0x01);
-//        osThreadSetPriority(Get_HumidityHandle, osPriorityHigh);
-//        osThreadSetPriority(Get_DistanceHandle, osPriorityNormal);
-//        osThreadSetPriority(Get_TempHandle, osPriorityNormal);
-    } else {
-        printf("t->1\n");
-        osThreadFlagsSet(Get_TempHandle, 0x01);
-//        osThreadSetPriority(Get_TempHandle, osPriorityHigh);
-//        osThreadSetPriority(Get_DistanceHandle, osPriorityNormal);
-//        osThreadSetPriority(Get_HumidityHandle, osPriorityNormal);
+    // In thông tin các deadline hiện tại để theo dõi
+	uint32_t current_time = osKernelGetTickCount(); // Lấy thời gian hiện tại
+    printf("%lu:::%lu ----%lu----%lu\n",current_time, tasks[0].earliest_deadline, tasks[1].earliest_deadline, tasks[2].earliest_deadline);
+
+
+
+    // Cập nhật lại deadline dựa trên chu kỳ cố định
+    for (int i = 0; i < NUM_TASKS; i++) {
+        if (current_time > tasks[i].end_cycle) {
+            // Cập nhật deadline và chuyển sang chu kỳ kế tiếp
+            tasks[i].earliest_deadline = tasks[i].end_cycle + tasks[i].deadline;
+            tasks[i].end_cycle += tasks[i].period;
+        }
     }
-}
+
+    // Tìm tác vụ có deadline sớm nhất
+    int earliest_task = 0;
+    for (int i = 0; i < NUM_TASKS; i++) {
+        if (tasks[i].earliest_deadline < tasks[earliest_task].earliest_deadline) {
+            earliest_task = i;
+        }
+    }
+    if(tasks[earliest_task].earliest_deadline<tasks[earliest_task].end_cycle){
+    	// Ghi nhật ký nhiệm vụ được ưu tiên (cho mục đích kiểm tra)
+    	    printf("Task %d ->1 (Deadline: %lu)\n", earliest_task, tasks[earliest_task].earliest_deadline);
+
+
+    	    osThreadFlagsSet(Get_DistanceHandle, earliest_task == 0 ? FLAG_TASK_0 : 0);
+    	    osThreadFlagsSet(Get_TempHandle, earliest_task == 1 ? FLAG_TASK_1 : 0);
+    	    osThreadFlagsSet(Get_HumidityHandle, earliest_task == 2 ? FLAG_TASK_2 : 0);
+    	//
+    	//    // Thiết lập ưu tiên cho các tác vụ
+    	//    osThreadSetPriority(Get_DistanceHandle, earliest_task == 0 ? osPriorityNormal1 : osPriorityNormal);
+    	//    osThreadSetPriority(Get_TempHandle, earliest_task == 1 ? osPriorityNormal1 : osPriorityNormal);
+    	//    osThreadSetPriority(Get_HumidityHandle, earliest_task == 2 ? osPriorityNormal1 : osPriorityNormal);
+
+    }
+    }
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -150,6 +182,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
+
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -158,6 +191,7 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
+
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -184,19 +218,22 @@ int main(void)
   dht22_init();
   I2C_LCD_Init(MyI2C_LCD);
 
-  uint32_t current_time = HAL_GetTick();  // Get the current system time
-  earliest_d_distance +=D_Distance;
-  earliest_d_temp +=T_Temp;
-  earliest_d_humidity +=T_Humidity;
-  end_t_distance = current_time+T_Distance;
-  end_t_temp = current_time+T_Temp;
-  end_t_humidity = current_time+T_Humidity;
+  uint32_t current_time = osKernelGetTickCount();  // Get the current system time
+  tasks[0].earliest_deadline =current_time + tasks[0].deadline;
+  tasks[1].earliest_deadline =current_time +tasks[1].deadline;
+  tasks[2].earliest_deadline =current_time +tasks[2].deadline;
+  tasks[0].end_cycle = current_time+tasks[0].period;
+  tasks[1].end_cycle = current_time+tasks[1].period;
+  tasks[2].end_cycle = current_time+tasks[2].period;
 
 
   /* USER CODE END 2 */
 
   /* Init scheduler */
   osKernelInitialize();
+  /* Create the mutex(es) */
+  /* creation of UARTMutex */
+  UARTMutexHandle = osMutexNew(&UARTMutex_attributes);
 
   /* USER CODE BEGIN RTOS_MUTEX */
   /* USER CODE END RTOS_MUTEX */
@@ -210,7 +247,7 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_TIMERS */
   /* Start the EDF Scheduler timer */
-  if (osTimerStart(EDF_SchedulerHandle, 100) != osOK) {
+  if (osTimerStart(EDF_SchedulerHandle, 30) != osOK) {
       printf("Failed to start EDF Scheduler timer\n");
   }
 
@@ -499,28 +536,32 @@ static void MX_GPIO_Init(void)
 void Function_Get_Distance(void *argument)
 {
   /* USER CODE BEGIN 5 */
+	uint16_t id=1;
 	while(1){
-		osThreadFlagsWait(0x01, osFlagsWaitAny, osWaitForever);  // Wait for the EDF scheduler signal
-////		osStatus_t status = osThreadFlagsWait(0x01, osFlagsWaitAny, 1000); // 1-second timeout
-////		if (status == osErrorTimeout) {
-////		    printf("Timeout waiting for signal\n");
-//		}
-		printf("test_d\n");
-		earliest_d_distance=end_t_distance+D_Distance;
+		osThreadFlagsWait(FLAG_TASK_0, osFlagsWaitAny, osWaitForever);
 
-		uint16_t id=1;
-		if (hc04_state == HCSR04_IDLE_STATE) {
-			HCSR04_Start();
-		}
-		int retry;
-		retry = HCSR04_Handle();
-		if(retry){
-			HCSR04_Start();
-			HCSR04_Handle();
-		}
-		earliest_d_distance=end_t_distance+D_Distance;
-		// Send the result to the LCD queue
-		osMessageQueuePut(LCDQueueHandle, &id, 0, osWaitForever);
+		printf("test_d\n");
+        if (osMutexAcquire(UARTMutexHandle, osWaitForever) == osOK) {
+            // Thực hiện truy cập tài nguyên được bảo vệ
+			printf("test_d\n");
+
+
+			if (hc04_state == HCSR04_IDLE_STATE) {
+				HCSR04_Start();
+			}
+			int retry;
+			retry = HCSR04_Handle();
+			if(retry){
+				HCSR04_Start();
+				HCSR04_Handle();
+			}
+			tasks[0].earliest_deadline=tasks[0].end_cycle+tasks[0].deadline;
+			// Send the result to the LCD queue
+
+			osMessageQueuePut(LCDQueueHandle, &id, 0, osWaitForever);
+			osMutexRelease(UARTMutexHandle);
+        }
+//		osDelay(tasks[0].period);
 	}
 
   /* USER CODE END 5 */
@@ -531,22 +572,25 @@ void Function_Get_Distance(void *argument)
 void Function_Get_Temp(void *argument)
 {
   /* USER CODE BEGIN Function_Get_Temp */
+	uint16_t id=2;
 	while(1){
-		osThreadFlagsWait(0x01, osFlagsWaitAny, osWaitForever);  // Wait for the EDF scheduler signal
-//		osStatus_t status = osThreadFlagsWait(0x01, osFlagsWaitAny, 1000); // 1-second timeout
-//		if (status == osErrorTimeout) {
-//		    printf("Timeout waiting for signal\n");
-//		}
-		printf("test_t\n");
+		osThreadFlagsWait(FLAG_TASK_1, osFlagsWaitAny, osWaitForever);
 
-		uint16_t id=2;
+		printf("test_t\n");
+        if (osMutexAcquire(UARTMutexHandle, osWaitForever) == osOK) {
+            // Thực hiện truy cập tài nguyên được bảo vệ
+        	printf("test_t\n");
+
+
 		DHT22_Get_Temp(&T);
 
 
 		// Send the result to the LCD queue
-		earliest_d_temp=end_t_temp+D_Temp;
+		tasks[1].earliest_deadline=tasks[1].end_cycle+tasks[1].deadline;
 		osMessageQueuePut(LCDQueueHandle, &id, 0, osWaitForever);
-
+		osMutexRelease(UARTMutexHandle);
+        }
+//		osDelay(tasks[1].period);
 	}
 
   /* USER CODE END Function_Get_Temp */
@@ -557,21 +601,21 @@ void Function_Get_Temp(void *argument)
 void Function_Get_Humidity(void *argument)
 {
   /* USER CODE BEGIN Function_Get_Humidity */
-
+	uint16_t id=3;
 	while(1){
-		osThreadFlagsWait(0x01, osFlagsWaitAny, osWaitForever);  // Wait for the EDF scheduler signal
-		/* Start the EDF Scheduler timer */
-//		if (osTimerStart(EDF_SchedulerHandle, 1) != osOK) {
-//		    printf("Failed to start EDF Scheduler timer\n");
-//		}
-
+		osThreadFlagsWait(FLAG_TASK_2, osFlagsWaitAny, osWaitForever);
 		printf("test_h\n");
-		DHT22_Get_Humidity(&H);
-		uint16_t id=3;
-		// Send the result to the LCD queue
-		earliest_d_humidity=end_t_humidity+D_Humidity;
-		osMessageQueuePut(LCDQueueHandle, &id, 0, osWaitForever);
+        if (osMutexAcquire(UARTMutexHandle, osWaitForever) == osOK) {
+            // Thực hiện truy cập tài nguyên được bảo vệ
+			printf("test_h\n");
+			DHT22_Get_Humidity(&H);
 
+			// Send the result to the LCD queue
+			tasks[2].earliest_deadline=tasks[2].end_cycle+tasks[2].deadline;
+			osMessageQueuePut(LCDQueueHandle, &id, 0, osWaitForever);
+			osMutexRelease(UARTMutexHandle);
+        }
+//		osDelay(tasks[2].period);
 	}
 
   /* USER CODE END Function_Get_Humidity */
@@ -617,9 +661,6 @@ void Function_LCD_UART(void *argument)
 					break;
       	  }
         }
-        osDelay(1);
-
-
     }
   /* USER CODE END Function_LCD_UART */
 }
@@ -628,8 +669,11 @@ void Function_LCD_UART(void *argument)
 void CallbackEDF_Scheduler(void *argument)
 {
   /* USER CODE BEGIN CallbackEDF_Scheduler */
-	EDF_Scheduler();
-
+//	if (osMutexAcquire(UARTMutexHandle, osWaitForever) == osOK) {
+		printf("callback\n");
+		EDF_Scheduler();
+//		osMutexRelease(UARTMutexHandle);
+//	}
   /* USER CODE END CallbackEDF_Scheduler */
 }
 
