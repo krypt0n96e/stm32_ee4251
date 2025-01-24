@@ -10,6 +10,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
+#include <stdlib.h>
 #include "dht22.h"
 #include "I2C_LCD.h"
 #include "stdio.h"
@@ -93,11 +94,30 @@ osMutexId_t UARTMutexHandle;
 const osMutexAttr_t UARTMutex_attributes = {
   .name = "UARTMutex"
 };
+/* Definitions for LCDMutex */
+osMutexId_t LCDMutexHandle;
+const osMutexAttr_t LCDMutex_attributes = {
+  .name = "LCDMutex"
+};
 /* USER CODE BEGIN PV */
 int NUM_TASKS=3;
-char buf1[16],buf2[16]; // 1 dòng LCD chỉ có 16 ký tự
+char buf[32]; // 1 dòng LCD chỉ có 16 ký tự
 float T,H;
-uint16_t C_Distance = 1, C_Temp = 8, C_Humidity = 8;  //Chu kỳ cho từng task
+
+uint8_t RX_data,index_buf = 0;
+int RX_done=0;
+#define RX_BUFFER_SIZE 20
+uint8_t rxBuffer[20];  // Bộ đệm nhận dữ liệu
+uint8_t rxData;                    // Lưu dữ liệu từng byte
+
+int task_id;
+uint32_t deadline, period;
+
+//int print_one_yet=0;
+
+char received_char;
+volatile bool system_running = false;  // Trạng thái hệ thống
+
 #define FLAG_TASK_0 0x01
 #define FLAG_TASK_1 0x02
 #define FLAG_TASK_2 0x04
@@ -118,10 +138,19 @@ void Function_LCD_UART(void *argument);
 void CallbackEDF_Scheduler(void *argument);
 
 /* USER CODE BEGIN PFP */
+void Deadline_Init(){
+	  uint32_t current_time = osKernelGetTickCount();  // Get the current system time
+	  tasks[0].earliest_deadline =current_time + tasks[0].deadline;
+	  tasks[1].earliest_deadline =current_time +tasks[1].deadline;
+	  tasks[2].earliest_deadline =current_time +tasks[2].deadline;
+	  tasks[0].end_cycle = current_time+tasks[0].period;
+	  tasks[1].end_cycle = current_time+tasks[1].period;
+	  tasks[2].end_cycle = current_time+tasks[2].period;
+}
 void EDF_Scheduler(void) {
     // In thông tin các deadline hiện tại để theo dõi
 	uint32_t current_time = osKernelGetTickCount(); // Lấy thời gian hiện tại
-    printf("%lu:::%lu ----%lu----%lu\n",current_time, tasks[0].earliest_deadline, tasks[1].earliest_deadline, tasks[2].earliest_deadline);
+//    printf("%lu:::%lu ----%lu----%lu\n",current_time, tasks[0].earliest_deadline, tasks[1].earliest_deadline, tasks[2].earliest_deadline);
 
 
 
@@ -210,6 +239,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
   HAL_TIM_Base_Start(&htim3);
   printf("start\n");
+  printf("\"start.\"->start\n");
 
   CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
   DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
@@ -218,14 +248,13 @@ int main(void)
   dht22_init();
   I2C_LCD_Init(MyI2C_LCD);
 
-  uint32_t current_time = osKernelGetTickCount();  // Get the current system time
-  tasks[0].earliest_deadline =current_time + tasks[0].deadline;
-  tasks[1].earliest_deadline =current_time +tasks[1].deadline;
-  tasks[2].earliest_deadline =current_time +tasks[2].deadline;
-  tasks[0].end_cycle = current_time+tasks[0].period;
-  tasks[1].end_cycle = current_time+tasks[1].period;
-  tasks[2].end_cycle = current_time+tasks[2].period;
+  I2C_LCD_Clear(MyI2C_LCD);
+  sprintf(buf,"\"start.\"->start");
+  I2C_LCD_WriteString(MyI2C_LCD, buf);
 
+//  HAL_UART_Receive_IT(&huart3, (uint8_t*)&received_char, 1);
+
+  HAL_UART_Receive_IT(&huart3, &RX_data, 1);
 
   /* USER CODE END 2 */
 
@@ -234,6 +263,9 @@ int main(void)
   /* Create the mutex(es) */
   /* creation of UARTMutex */
   UARTMutexHandle = osMutexNew(&UARTMutex_attributes);
+
+  /* creation of LCDMutex */
+  LCDMutexHandle = osMutexNew(&LCDMutex_attributes);
 
   /* USER CODE BEGIN RTOS_MUTEX */
   /* USER CODE END RTOS_MUTEX */
@@ -250,7 +282,6 @@ int main(void)
   if (osTimerStart(EDF_SchedulerHandle, 30) != osOK) {
       printf("Failed to start EDF Scheduler timer\n");
   }
-
   /* USER CODE END RTOS_TIMERS */
 
   /* Create the queue(s) */
@@ -291,7 +322,6 @@ int main(void)
   while(1)
   {
     /* USER CODE END WHILE */
-
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -524,6 +554,147 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+//void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+//{
+//    HAL_UART_Receive_IT(&huart3, (uint8_t*)&received_char, 1);
+//
+//    if (received_char == 's') {  // Lệnh 'S' để bắt đầu hệ thống
+//        system_running = true;
+////        if (osTimerStart(EDF_SchedulerHandle, 30) != osOK) {
+////            printf("Failed to start EDF Scheduler timer\n");
+////        }
+//        Deadline_Init();
+//        I2C_LCD_Clear(MyI2C_LCD);
+//        LCD_UARTHandle = osThreadNew(Function_LCD_UART, NULL, &LCD_UART_attributes);
+//        printf("System Started\n");
+//    }
+//    else if (received_char == 'p') {  // Lệnh 'P' để dừng hệ thống
+////    	osTimerStop(EDF_SchedulerHandle);
+//        system_running = false;
+//        osThreadTerminate(LCD_UARTHandle);
+//        I2C_LCD_Clear(MyI2C_LCD);
+//		sprintf(buf,"Send s to start");
+//		I2C_LCD_SetCursor(MyI2C_LCD, 0, 0);
+//		I2C_LCD_WriteString(MyI2C_LCD, buf);
+//        printf("System Stopped\n");
+//    }
+//}
+// Hàm xử lý khi UART nhận dữ liệu xong
+
+// Hàm phân tích lệnh và thay đổi thông số task
+//void process_uart_command(const char *command) {
+//    uint8_t task_id;
+//    uint32_t deadline, period;
+//
+//    // Lệnh "set <task_id> <deadline> <period>"
+//    if (sscanf(command, "set %hhu %lu %lu", &task_id, &deadline, &period) == 3) {
+//        if (task_id < NUM_TASKS) {
+//            tasks[task_id].deadline = deadline;
+//            tasks[task_id].period = period;
+//            printf("Task %d updated: Deadline=%lu, Period=%lu\n", task_id, deadline, period);
+//        } else {
+//            printf("Error: Invalid task ID. Use task_id between 0 and %d.\n", NUM_TASKS - 1);
+//        }
+//    }
+//    // Lệnh "start" để khởi động hệ thống
+//    else if (strcmp(command, "start") == 0) {
+//        if (!system_running) {
+//            system_running = true;
+//            Deadline_Init();
+//            I2C_LCD_Clear(MyI2C_LCD);
+//            LCD_UARTHandle = osThreadNew(Function_LCD_UART, NULL, &LCD_UART_attributes);
+//            printf("System started successfully.\n");
+//        } else {
+//            printf("System is already running.\n");
+//        }
+//    }
+//    // Lệnh "stop" để dừng hệ thống
+//    else if (strcmp(command, "stop") == 0) {
+//        if (system_running) {
+//            system_running = false;
+//            osThreadTerminate(LCD_UARTHandle);
+//            I2C_LCD_Clear(MyI2C_LCD);
+//            sprintf(buf, "Send s to start");
+//            I2C_LCD_SetCursor(MyI2C_LCD, 0, 0);
+//            I2C_LCD_WriteString(MyI2C_LCD, buf);
+//            printf("System stopped successfully.\n");
+//        } else {
+//            printf("System is not running.\n");
+//        }
+//    }
+//    // Lệnh không hợp lệ
+//    else {
+//        printf("Error: Invalid command. Available commands:\n");
+//        printf("  set <task_id> <deadline> <period>\n");
+//        printf("  start\n");
+//        printf("  stop\n");
+//    }
+//}
+//void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+//    if (huart->Instance == USART3) { // Kiểm tra đúng UART3
+//        if (uart_buffer[uart_buffer_index] == '\n' || uart_buffer[uart_buffer_index] == '\r') {
+//            // Kết thúc lệnh -> xử lý lệnh
+//            uart_buffer[uart_buffer_index] = '\0'; // Đảm bảo chuỗi kết thúc
+//            process_uart_command(uart_buffer);    // Gọi hàm xử lý lệnh
+//
+//            // Reset bộ đệm để nhận lệnh mới
+//            uart_buffer_index = 0;
+//        } else {
+//            // Tiếp tục lưu vào bộ đệm
+//            uart_buffer_index++;
+//            if (uart_buffer_index >= UART_BUFFER_SIZE) {
+//                uart_buffer_index = 0; // Tránh tràn bộ đệm
+//                printf("Error: UART buffer overflow. Command too long.\n");
+//            }
+//        }
+//
+//        // Bắt đầu nhận ký tự tiếp theo
+//        HAL_UART_Receive_IT(huart, (uint8_t*)&uart_buffer[uart_buffer_index], 1);
+//    }
+//}
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+	UNUSED(huart);
+	if (huart->Instance == huart3.Instance) {
+		if(RX_data !=46)
+		{ //NULL ASCII
+			rxBuffer[index_buf++] = RX_data;//Them du lieu vao buffer
+		}
+		else if(RX_data==46)
+		{
+			index_buf = 0; // xoa con tro du lieu
+			sprintf (buf,rxBuffer);
+			memset(rxBuffer,0,strlen(rxBuffer));
+			if(strcmp(buf,"start")==0){
+				        system_running = true;
+				//        if (osTimerStart(EDF_SchedulerHandle, 30) != osOK) {
+				//            printf("Failed to start EDF Scheduler timer\n");
+				//        }
+				        Deadline_Init();
+				        I2C_LCD_Clear(MyI2C_LCD);
+				        LCD_UARTHandle = osThreadNew(Function_LCD_UART, NULL, &LCD_UART_attributes);
+				        printf("System Started\n");
+			}
+			else if(strcmp(buf,"stop")==0){
+				//    	osTimerStop(EDF_SchedulerHandle);
+				        system_running = false;
+				        osThreadTerminate(LCD_UARTHandle);
+				        I2C_LCD_Clear(MyI2C_LCD);
+						sprintf(buf,"\"start.\"->start");
+						I2C_LCD_WriteString(MyI2C_LCD, buf);
+				        printf("System Stopped\n");
+			}
+			else if(sscanf(buf, "set %d %lu %lu", &task_id, &deadline, &period)==3){
+				tasks[task_id].deadline=deadline;
+				tasks[task_id].period=period;
+				printf("Setting done\n");
+			}
+		}
+		HAL_UART_Receive_IT(&huart3, &RX_data, 1);
+	}
+}
+
+
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_Function_Get_Distance */
@@ -540,10 +711,10 @@ void Function_Get_Distance(void *argument)
 	while(1){
 		osThreadFlagsWait(FLAG_TASK_0, osFlagsWaitAny, osWaitForever);
 
-		printf("test_d\n");
+//		printf("test_d\n");
         if (osMutexAcquire(UARTMutexHandle, osWaitForever) == osOK) {
             // Thực hiện truy cập tài nguyên được bảo vệ
-			printf("test_d\n");
+//			printf("test_d\n");
 
 
 			if (hc04_state == HCSR04_IDLE_STATE) {
@@ -576,10 +747,10 @@ void Function_Get_Temp(void *argument)
 	while(1){
 		osThreadFlagsWait(FLAG_TASK_1, osFlagsWaitAny, osWaitForever);
 
-		printf("test_t\n");
+//		printf("test_t\n");
         if (osMutexAcquire(UARTMutexHandle, osWaitForever) == osOK) {
             // Thực hiện truy cập tài nguyên được bảo vệ
-        	printf("test_t\n");
+//        	printf("test_t\n");
 
 
 		DHT22_Get_Temp(&T);
@@ -604,10 +775,10 @@ void Function_Get_Humidity(void *argument)
 	uint16_t id=3;
 	while(1){
 		osThreadFlagsWait(FLAG_TASK_2, osFlagsWaitAny, osWaitForever);
-		printf("test_h\n");
+//		printf("test_h\n");
         if (osMutexAcquire(UARTMutexHandle, osWaitForever) == osOK) {
             // Thực hiện truy cập tài nguyên được bảo vệ
-			printf("test_h\n");
+//			printf("test_h\n");
 			DHT22_Get_Humidity(&H);
 
 			// Send the result to the LCD queue
@@ -632,34 +803,37 @@ void Function_LCD_UART(void *argument)
         // Check if data is available in the queue
 
         if (osMessageQueueGet(LCDQueueHandle, &received_id, NULL, osWaitForever) == osOK) {
-        	printf("LCD-%d\n",received_id);
+        	printf("LCD-%d: ",received_id);
 
+        	if (osMutexAcquire(LCDMutexHandle, osWaitForever) == osOK) {
       	  // Kiểm tra giá trị dữ liệu và thực hiện hành động tương ứng
       	  switch (received_id) {
       		  case 1:
-      			printf("LCD111\n");
-					sprintf(buf1,"D = %.1f cm", hcsr04_distance);
+//      			printf("LCD111\n");
+					sprintf(buf,"D = %.1f cm", hcsr04_distance);
 					I2C_LCD_SetCursor(MyI2C_LCD, 0, 0);
-					I2C_LCD_WriteString(MyI2C_LCD, buf1);
+					I2C_LCD_WriteString(MyI2C_LCD, buf);
 					printf("D = %.1f\r\n",hcsr04_distance);
 					break;
 
       		  case 2:
-      			printf("LCD222\n");
-					sprintf(buf2,"T=%.1f", T);
+//      			printf("LCD222\n");
+					sprintf(buf,"T=%.1f", T);
 					I2C_LCD_SetCursor(MyI2C_LCD, 0, 1);
-					I2C_LCD_WriteString(MyI2C_LCD, buf2);
+					I2C_LCD_WriteString(MyI2C_LCD, buf);
 					printf("T = %.1f\r\n",T);
 					break;
 
       		  case 3:
-      			printf("LCD333\n");
-					sprintf(buf2,"H=%.1f", H);
+//      			printf("LCD333\n");
+					sprintf(buf,"H=%.1f", H);
 					I2C_LCD_SetCursor(MyI2C_LCD, 7, 1);
-					I2C_LCD_WriteString(MyI2C_LCD, buf2);
+					I2C_LCD_WriteString(MyI2C_LCD, buf);
 					printf("H = %.1f\r\n",H);
 					break;
-      	  }
+      	  	  }
+      	  	  osMutexRelease(LCDMutexHandle);
+        	}
         }
     }
   /* USER CODE END Function_LCD_UART */
@@ -670,8 +844,19 @@ void CallbackEDF_Scheduler(void *argument)
 {
   /* USER CODE BEGIN CallbackEDF_Scheduler */
 //	if (osMutexAcquire(UARTMutexHandle, osWaitForever) == osOK) {
-		printf("callback\n");
+//		printf("callback\n");
+	if (system_running){
 		EDF_Scheduler();
+	}
+//	else{
+////		if(!print_one_yet){
+////			printf("call");
+////			I2C_LCD_Clear(MyI2C_LCD);
+////			I2C_LCD_WriteString(MyI2C_LCD, buf);
+////			print_one_yet=1;
+////		}
+//	}
+
 //		osMutexRelease(UARTMutexHandle);
 //	}
   /* USER CODE END CallbackEDF_Scheduler */
